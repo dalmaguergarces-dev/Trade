@@ -130,10 +130,17 @@ function table(el, head, rows, emptyText) {
       : `<tr><td class="empty" colspan="${head.length}">${emptyText}</td></tr>`) + "</tbody>";
 }
 
+// Read the bot's latest data straight from GitHub so the site stays current
+// without redeploying; fall back to the copy bundled with the deployment.
+const LIVE_BASE = "https://raw.githubusercontent.com/dalmaguergarces-dev/Trade/main/docs/";
 async function load(path) {
-  const r = await fetch(path + "?t=" + Date.now());
-  if (!r.ok) throw new Error(path + " " + r.status);
-  return r.json();
+  for (const url of [LIVE_BASE + path, path]) {
+    try {
+      const r = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
+      if (r.ok) return await r.json();
+    } catch (e) { /* try the next source */ }
+  }
+  throw new Error("couldn't load " + path);
 }
 
 async function render() {
