@@ -25,6 +25,18 @@ jobs:
         id: run
         continue-on-error: true   # still save accounts that succeeded
         run: python -m bot.run
+      - name: Live wallet
+        id: live
+        # Only when the LIVE_TRADING repository variable is "dry" or "on".
+        if: vars.LIVE_TRADING == 'dry' || vars.LIVE_TRADING == 'on'
+        continue-on-error: true
+        env:
+          LIVE_TRADING: ${{ vars.LIVE_TRADING }}
+          SOLANA_BOT_KEY: ${{ secrets.SOLANA_BOT_KEY }}
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+        run: |
+          pip install --quiet -r requirements.txt
+          python -m bot.live
       - name: Commit updated state
         run: |
           git config user.name "paper-bot"
@@ -36,5 +48,5 @@ jobs:
             git push
           fi
       - name: Report failure
-        if: steps.run.outcome == 'failure'
+        if: steps.run.outcome == 'failure' || steps.live.outcome == 'failure'
         run: exit 1

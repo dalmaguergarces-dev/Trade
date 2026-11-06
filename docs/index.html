@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233b5bdb'/%3E%3Cpath d='M12 44 L26 30 L36 38 L52 20' stroke='white' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="icon.png">
-<title>Paper Trading Bots</title>
+<title>Trading Bots</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
@@ -39,10 +39,15 @@
 
   /* Account switcher: stays visible while scrolling. */
   .tabs-wrap { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0; margin-top: 6px; }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--tab); }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 12px; background: var(--tab); }
   .tab { border: 0; background: transparent; color: var(--text); border-radius: 9px; padding: 9px 10px;
-    font: inherit; font-weight: 600; cursor: pointer; min-height: 48px; }
-  .tab small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
+    font: inherit; font-weight: 600; cursor: pointer; min-height: 48px; min-width: 0; font-size: 14px; }
+  .live-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; vertical-align: 2px; }
+  .live-on { background: var(--down); color: #fff; } .live-dry { background: var(--tab); color: var(--muted); }
+  .item a, .note a, .link { color: var(--accent); text-decoration: none; }
+  ol.steps { margin: 8px 0 0; padding-left: 20px; } ol.steps li { margin: 6px 0; }
+  code { font-size: 13px; background: var(--tab); padding: 1px 5px; border-radius: 5px; word-break: break-all; }
+  .tab small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; font-weight: 400; }
   .tab[aria-selected="true"] { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
@@ -92,8 +97,8 @@
 <body>
 <main>
   <header>
-    <h1>Paper Trading Bots</h1>
-    <span class="pill">PAPER MONEY</span>
+    <h1>Trading Bots</h1>
+    <span class="pill" id="pill">PAPER MONEY</span>
   </header>
   <div class="tabs-wrap"><div class="tabs" id="tabs" role="tablist"></div></div>
 
@@ -106,12 +111,28 @@
   <div class="card chart"><canvas id="live-chart" aria-label="Account value over time"></canvas></div>
   <p class="muted" id="sub">Loading…</p>
 
+  <section class="card" id="setup" hidden>
+    <b>Live wallet isn't set up yet</b>
+    <ol class="steps">
+      <li>In Phantom, add a <b>new account</b> just for the bot (Add / Connect Wallet → Create new account). Don't use your main account.</li>
+      <li>Send it a small amount: <b>$50–100 of USDC</b> plus about <b>0.05 SOL</b> for network fees.</li>
+      <li>In Phantom: Settings → Manage Accounts → the bot account → <b>Show Private Key</b>. Copy it. Never paste it into a chat or website.</li>
+      <li>In GitHub: <a class="link" href="https://github.com/dalmaguergarces-dev/Trade/settings/secrets/actions/new" target="_blank" rel="noopener">add a repository secret</a> named <code>SOLANA_BOT_KEY</code> and paste the key there.</li>
+      <li>Then <a class="link" href="https://github.com/dalmaguergarces-dev/Trade/settings/variables/actions/new" target="_blank" rel="noopener">add a repository variable</a> named <code>LIVE_TRADING</code> with value <code>dry</code> (practice). Change it to <code>on</code> to trade for real, or <code>off</code> to stop.</li>
+    </ol>
+  </section>
+
   <h2>Open positions</h2>
   <div class="list" id="positions"></div>
 
   <h2>Trades</h2>
   <div class="list" id="trades"></div>
   <button class="more" id="more" hidden>Show all trades</button>
+
+  <div id="activity-wrap" hidden>
+    <h2>Activity</h2>
+    <div class="list" id="activity"></div>
+  </div>
 
   <h2>About this bot</h2>
   <div class="note" id="about"></div>
@@ -138,6 +159,13 @@ const ACCOUNTS = {
     about: "Buys sharp short-term dips in Solana tokens and sells on the bounce, using DEX prices and real Jupiter swap costs. " +
       "It trades about once a day. In testing it was roughly breakeven after costs: before costs it earns only about 0.1–0.25% per trade, " +
       "so a swing of a few percent either way over a few weeks is normal noise.",
+  },
+  solana_live: {
+    label: "Live wallet", short: "real money", live: true,
+    about: "Real trades from the bot's own Solana wallet, following the same strategy as the Solana paper bot. " +
+      "Hard limits: at most $25 per buy, 3 open positions, no new buys after losing $10 in a day or 30% overall. " +
+      "In testing this strategy was roughly breakeven after costs, so only use money you can afford to lose. " +
+      "You can withdraw at any time from Phantom.",
   },
   swing_6h: {
     label: "Swing · 6h", short: "BTC ETH SOL",
@@ -234,8 +262,73 @@ async function load(path) {
   throw new Error("couldn't load " + path);
 }
 
+const solscan = (sig) => sig ? `<a href="https://solscan.io/tx/${sig}" target="_blank" rel="noopener">view tx ↗</a>` : "";
+
+function setLiveLayout(isLive) {
+  $("pill").textContent = isLive ? "REAL MONEY" : "PAPER MONEY";
+  $("pill").style.cssText = isLive ? "background:var(--down);color:#fff" : "";
+  $("bt").hidden = isLive;
+  $("activity-wrap").hidden = !isLive;
+  if (!isLive) $("setup").hidden = true;
+}
+
+async function renderLive() {
+  let st;
+  try { st = await load("data/solana_live.json"); } catch (e) { st = null; }
+  if (current !== "solana_live") return;
+  $("setup").hidden = !!st;
+  if (!st) {
+    $("hero-label").textContent = "Live wallet";
+    $("equity").textContent = "Not set up";
+    $("change").innerHTML = "&nbsp;"; $("live-stats").innerHTML = "";
+    $("live-chart").parentElement.style.display = "none";
+    $("sub").textContent = "";
+    list($("positions"), [], "No wallet connected.");
+    list($("trades"), [], "No trades yet."); $("more").hidden = true;
+    list($("activity"), [], "Nothing yet.");
+    return;
+  }
+  $("live-chart").parentElement.style.display = "";
+  const start = st.start_value || st.value, chg = st.value - start;
+  const badge = st.mode === "on" ? `<span class="live-badge live-on">LIVE</span>` : `<span class="live-badge live-dry">PRACTICE</span>`;
+  $("hero-label").innerHTML = `Bot wallet <a class="link" href="https://solscan.io/account/${st.wallet}" target="_blank" rel="noopener">${st.wallet.slice(0, 4)}…${st.wallet.slice(-4)} ↗</a>${badge}`;
+  $("equity").textContent = usd(st.value);
+  $("change").innerHTML = `<span class="${cls(chg)}">${pct(start ? chg / start * 100 : 0)} (${usd(chg)})</span> since ${day(st.started)}`;
+  const tr = st.trades, wins = tr.filter(t => t.pnl > 0).length;
+  stats($("live-stats"), [
+    ["USDC", usd(st.balances.USDC)], ["SOL", (st.balances.SOL || 0).toFixed(4)],
+    ["Open", Object.keys(st.positions).length], ["Trades", tr.length],
+    ["Win rate", tr.length ? (wins / tr.length * 100).toFixed(0) + "%" : "–"],
+    ["Realized P&L", usd(tr.reduce((a, t) => a + t.pnl, 0)), cls(tr.reduce((a, t) => a + t.pnl, 0))],
+    ["New buys", st.halt ? "Paused" : "Allowed", st.halt ? "down" : ""],
+    ["Mode", st.mode === "on" ? "Live" : "Practice"],
+  ]);
+  equityChart("live-chart", st.equity, start);
+  $("sub").textContent = `Last check ${when(st.updated)}` + (st.halt ? ` · Paused: ${st.halt.reason}` : "");
+  list($("positions"), Object.entries(st.positions).map(([sym, p]) => {
+    const lp = (st.prices || {})[sym] || p.entry, u = p.qty * lp - p.cost;
+    return `<div class="item"><div class="row"><span class="sym">${sym}</span>
+      <span class="pnl ${cls(u)}">${usd(u)} <small>(${pct(u / p.cost * 100)})</small></span></div>
+      <div class="meta">Cost ${usd(p.cost)} · bought ${usd(p.entry)} · now ${usd(lp)}</div>
+      <div class="meta">Stop ${usd(p.stop)} · ${when(p.opened)} · ${solscan(p.tx)}</div></div>`;
+  }), "No open positions.");
+  const trades = tr.slice().reverse();
+  list($("trades"), (showAll ? trades : trades.slice(0, SHOW)).map(t =>
+    `<div class="item"><div class="row"><span class="sym">${t.symbol}</span>
+      <span class="pnl ${cls(t.pnl)}">${usd(t.pnl)} <small>(${pct(t.pnl_pct)})</small></span></div>
+      <div class="meta">${usd(t.entry)} → ${usd(t.exit)} · ${REASON[t.reason] || t.reason} · held ${dur(t.closed - t.opened)}</div>
+      <div class="meta">Closed ${when(t.closed)} · ${solscan(t.tx_sell)}</div></div>`), "No trades yet.");
+  $("more").hidden = showAll || trades.length <= SHOW;
+  $("more").textContent = `Show all ${trades.length} trades`;
+  list($("activity"), st.log.slice(-12).reverse().map(l =>
+    `<div class="item"><div class="meta">${when(l.t)}${l.tx ? " · " + solscan(l.tx) : ""}</div><div>${l.msg.replace(/</g, "&lt;")}</div></div>`), "Nothing yet.");
+}
+
 async function render() {
   const acct = current;
+  setLiveLayout(!!ACCOUNTS[acct].live);
+  if (ACCOUNTS[acct].live) return renderLive();
+  $("live-chart").parentElement.style.display = "";
   try {
     const st = await load(`data/${acct}.json`);
     if (acct !== current) return;

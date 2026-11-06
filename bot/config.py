@@ -71,3 +71,21 @@ def make_strategy(account):
     from .strategies import STRATEGIES
     acct = ACCOUNTS[account]
     return STRATEGIES[acct["strategy"]](**acct["params"])
+
+
+# Real trading with the bot's own Solana wallet (see bot/live.py and README).
+# It follows the solana_15m strategy but with these hard limits. Turned on by
+# the LIVE_TRADING repository variable: "dry" simulates, "on" trades for real.
+LIVE = {
+    "strategy_account": "solana_15m",
+    "max_trade_usd": 25.0,          # never spend more than this on one buy
+    "min_trade_usd": 5.0,           # skip buys smaller than this
+    "max_position_fraction": 0.25,  # ...or more than 25% of the wallet's value
+    "risk_per_trade": 0.01,         # size so a stop-out loses ~1% of the wallet
+    "max_open_positions": 3,
+    "daily_loss_limit_usd": 10.0,   # no new buys for the rest of the UTC day
+    "total_loss_limit_pct": 30.0,   # no new buys at all until reset
+    "slippage_bps": 50,             # max 0.5% worse than quoted
+    "max_price_impact_pct": 0.5,    # skip if the swap would move the price more
+    "sol_reserve": 0.02,            # SOL kept aside for network fees
+}

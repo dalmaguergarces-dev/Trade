@@ -1,7 +1,8 @@
-# Paper Trading Bots
+# Trading Bots
 
-Two crypto trading bots that trade **paper money only**, plus a dashboard that
-shows both: https://trade-paper-bot.vercel.app
+Two crypto trading bots that trade paper money, an optional live mode that
+trades a small real Solana wallet, and a dashboard for all of them:
+https://trade-paper-bot.vercel.app
 
 | Account | Markets | Candles | Strategy | Trades |
 |---|---|---|---|---|
@@ -81,9 +82,52 @@ loads its data from this repo's `main` branch, so the repo must stay public
 for the live numbers to show (otherwise it falls back to the copy deployed
 with the site).
 
-## Real money
+## Live wallet (real money)
 
-Neither bot can place real orders. A future live version for Solana would use
-a dedicated bot wallet (which you can import into Phantom to watch or withdraw)
-and swap through Jupiter, with hard spending limits. Given the results above,
-it shouldn't trade real money until the paper account has run for months.
+`bot/live.py` follows the `solana_15m` strategy with real Jupiter swaps from
+the bot's **own** Solana wallet. Your main wallet is never connected.
+
+**Hard limits** (`LIVE` in `bot/config.py`):
+
+| Limit | Default |
+|---|---|
+| Max spend per buy | $25 (and at most 25% of the wallet) |
+| Open positions at once | 3 |
+| Daily loss before new buys pause | $10 (resumes next UTC day) |
+| Total loss before new buys stop | 30% from when the wallet was funded |
+| Max slippage / price impact | 0.5% / 0.5% |
+| SOL kept aside for fees | 0.02 SOL |
+
+Sells are always allowed, so a paused bot still closes its positions.
+
+**Setup:**
+
+1. In Phantom, create a **new account** just for the bot.
+2. Send it $50–100 of USDC and about 0.05 SOL for network fees.
+3. In Phantom: Settings → Manage Accounts → the bot account → Show Private Key.
+4. In GitHub: Settings → Secrets and variables → Actions → **New repository
+   secret** `SOLANA_BOT_KEY`, and paste the key. Never paste it anywhere else.
+5. On the **Variables** tab, add `LIVE_TRADING` = `dry`. The bot then builds,
+   signs and simulates every swap without sending it, so you can check the
+   Activity list on the dashboard.
+6. Change `LIVE_TRADING` to `on` to trade for real, or `off` to stop.
+
+Optional: a faster RPC (for example a free Helius endpoint) as the secret
+`SOLANA_RPC_URL`. The default public RPC can be slow to land transactions.
+
+**Things to know:**
+
+- The bot's wallet address and trades are public: the repo is public and so
+  is the Solana blockchain.
+- Withdrawing or depositing changes the wallet value the loss limits measure
+  from. After a large deposit, delete `start_value` in
+  `docs/data/solana_live.json` to reset the baseline.
+- At $25 a trade, network and priority fees (~$0.01–0.02 per swap) add
+  roughly 0.1% per round trip on top of the costs used in testing.
+- Stops are checked every 15 minutes, not continuously, so a fast crash can
+  sell well below the stop price.
+
+## A word on real money
+
+The research above found no reliable edge at this trade frequency after costs.
+Keep the live wallet small, and judge it over months, not days.
