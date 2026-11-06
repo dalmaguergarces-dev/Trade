@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Trading Bot</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #646b78;
+    --line: #e3e6eb; --up: #0f8a5f; --down: #c93b3b; --accent: #3b5bdb;
+    --warn-bg: #fff6db; --warn-text: #7a5b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a21; --text: #e8eaee; --muted: #9aa1ad;
+      --line: #2a2f39; --up: #3ccf91; --down: #ff6b6b; --accent: #7c95ff;
+      --warn-bg: #2e2712; --warn-text: #f0cf6e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0; }
+  h2 { font-size: 17px; margin: 32px 0 12px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .pill { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px;
+    background: var(--warn-bg); color: var(--warn-text); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .note { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px;
+    padding: 12px 14px; margin-top: 16px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .chart { height: 280px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .empty { color: var(--muted); text-align: center; padding: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Paper Trading Bot</h1>
+    <span class="pill">PAPER MONEY ONLY</span>
+  </header>
+  <p class="muted" id="sub">Loading…</p>
+
+  <h2>Live paper account</h2>
+  <div class="grid" id="live-stats"></div>
+  <div class="card chart" style="margin-top:12px"><canvas id="live-chart"></canvas></div>
+
+  <h2>Open positions</h2>
+  <div class="card table-wrap"><table id="positions"></table></div>
+
+  <h2>Closed trades</h2>
+  <div class="card table-wrap"><table id="trades"></table></div>
+
+  <h2>Backtest: the same strategy on past data</h2>
+  <p class="muted" id="bt-sub"></p>
+  <div class="grid" id="bt-stats"></div>
+  <div class="card chart" style="margin-top:12px"><canvas id="bt-chart"></canvas></div>
+  <h2>Effect of trading fees on the backtest</h2>
+  <div class="card table-wrap"><table id="fees"></table></div>
+
+  <div class="note">
+    The strategy uses 6-hour candles and trades about twice a month across BTC, ETH and SOL.
+    Watching it for a few days will mostly show it waiting in cash, and even a few weeks of
+    results is too small a sample to prove anything. The backtest above covers far more trades.
+    It shows the bot losing less than buy-and-hold in falling markets but making far less in
+    rising ones. Past results don't predict future ones.
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const usd = (v) => v == null ? "–" : v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: v < 10 ? 4 : 2 });
+const pct = (v) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(2) + "%";
+const cls = (v) => v > 0 ? "up" : v < 0 ? "down" : "";
+const date = (t) => new Date(t * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function statCards(el, s, extra = []) {
+  const items = [
+    ["Equity", usd(s.equity), ""],
+    ["Return", pct(s.return_pct), cls(s.return_pct)],
+    ["Trades", s.trades, ""],
+    ["Win rate", s.win_rate == null ? "–" : s.win_rate + "%", ""],
+    ["Profit factor", s.profit_factor ?? "–", ""],
+    ["Max drawdown", !s.max_drawdown_pct ? "0%" : "-" + s.max_drawdown_pct + "%", ""],
+    ...extra,
+  ];
+  el.innerHTML = items.map(([l, v, c]) =>
+    `<div class="card"><div class="label">${l}</div><div class="value ${c}">${v}</div></div>`).join("");
+}
+
+const charts = {};
+function equityChart(id, points, start) {
+  if (typeof Chart === "undefined") { $(id).parentElement.style.display = "none"; return; }
+  charts[id]?.destroy();
+  charts[id] = new Chart($(id), {
+    type: "line",
+    data: {
+      labels: points.map(p => new Date(p[0] * 1000).toLocaleDateString()),
+      datasets: [
+        { data: points.map(p => p[1]), borderColor: css("--accent"), borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        { data: points.map(() => start), borderColor: css("--muted"), borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false,
+        callbacks: { label: (c) => c.datasetIndex ? "Start " + usd(c.raw) : "Equity " + usd(c.raw) } } },
+      scales: {
+        x: { ticks: { color: css("--muted"), maxTicksLimit: 6 }, grid: { display: false } },
+        y: { ticks: { color: css("--muted"), callback: (v) => "$" + v.toLocaleString() }, grid: { color: css("--line") } },
+      },
+    },
+  });
+}
+
+function table(el, head, rows, emptyText) {
+  el.innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` +
+    (rows.length ? rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")
+      : `<tr><td class="empty" colspan="${head.length}">${emptyText}</td></tr>`) + "</tbody>";
+}
+
+async function load(path) {
+  const r = await fetch(path + "?t=" + Date.now());
+  if (!r.ok) throw new Error(path + " " + r.status);
+  return r.json();
+}
+
+async function render() {
+  try {
+    const st = await load("data/state.json");
+    const start = st.config.STARTING_CASH;
+    const last = Math.max(...Object.values(st.last_candle));
+    $("sub").textContent = `Started ${date(st.started)} · last candle processed ${date(last)} · ` +
+      `fees ${(st.config.FEE_RATE * 100).toFixed(2)}% + slippage ${(st.config.SLIPPAGE * 100).toFixed(2)}% per side`;
+    statCards($("live-stats"), st.stats, [["Open positions", Object.keys(st.positions).length, ""]]);
+    equityChart("live-chart", st.equity, start);
+
+    table($("positions"), ["Coin", "Opened", "Qty", "Entry", "Last", "Stop", "Target", "Unrealized"],
+      Object.entries(st.positions).map(([s, p]) => {
+        const lp = st.last_price[s], u = p.qty * (lp - p.entry) - p.entry_fee;
+        return [s, date(p.opened), p.qty.toFixed(5), usd(p.entry), usd(lp), usd(p.stop), usd(p.target),
+          `<span class="${cls(u)}">${usd(u)}</span>`];
+      }), "No open positions. The bot is waiting for a trend signal.");
+
+    table($("trades"), ["Coin", "Opened", "Closed", "Entry", "Exit", "Exit reason", "P&L", "P&L %"],
+      st.trades.slice().reverse().map(t => [t.symbol, date(t.opened), date(t.closed), usd(t.entry), usd(t.exit),
+        t.reason, `<span class="${cls(t.pnl)}">${usd(t.pnl)}</span>`, `<span class="${cls(t.pnl)}">${pct(t.pnl_pct)}</span>`]),
+      "No closed trades yet.");
+  } catch (e) { $("sub").textContent = "Couldn't load live data: " + e.message; }
+
+  try {
+    const bt = await load("data/backtest.json");
+    $("bt-sub").textContent = `${date(bt.start)} → ${date(bt.end)} (${bt.days} days). ` +
+      `Buy-and-hold of the same coins over this period: ${pct(bt.buy_and_hold_return_pct)}.`;
+    statCards($("bt-stats"), bt.stats, [["Buy & hold", pct(bt.buy_and_hold_return_pct), cls(bt.buy_and_hold_return_pct)]]);
+    equityChart("bt-chart", bt.equity, 10000);
+    table($("fees"), ["Fee per side", "Return", "Profit factor", "Max drawdown"],
+      bt.fee_sensitivity.map(f => [f.fee_pct.toFixed(2) + "%", `<span class="${cls(f.return_pct)}">${pct(f.return_pct)}</span>`,
+        f.profit_factor ?? "–", "-" + f.max_drawdown_pct + "%"]), "");
+  } catch (e) { $("bt-sub").textContent = "Couldn't load backtest: " + e.message; }
+}
+
+render();
+setInterval(render, 5 * 60 * 1000);
+</script>
+</body>
+</html>
