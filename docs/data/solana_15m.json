@@ -1,0 +1,72 @@
+{
+ "started": 1793970005,
+ "cash": 10000.0,
+ "positions": {},
+ "pending": {},
+ "last_price": {
+  "SOL": 90.31104139858616,
+  "JUP": 0.24852274560637766,
+  "BONK": 2.9080118207004345e-06,
+  "RAY": 1.7735655574667384,
+  "PENGU": 0.006724432357570759
+ },
+ "last_candle": {
+  "SOL": 1793969100,
+  "JUP": 1793969100,
+  "BONK": 1793969100,
+  "RAY": 1793969100,
+  "PENGU": 1793968200
+ },
+ "trades": [],
+ "equity": [
+  [
+   1793968200,
+   10000.0
+  ]
+ ],
+ "account": "solana_15m",
+ "title": "Solana dip-buyer (15m)",
+ "updated": 1793970005,
+ "stats": {
+  "equity": 10000.0,
+  "return_pct": 0.0,
+  "trades": 0,
+  "win_rate": null,
+  "avg_trade_pct": null,
+  "profit_factor": null,
+  "max_drawdown_pct": 0.0,
+  "trades_per_day": 0.0
+ },
+ "config": {
+  "title": "Solana dip-buyer (15m)",
+  "source": "geckoterminal",
+  "granularity": 900,
+  "history": 1100,
+  "strategy": "dip_buy",
+  "params": {
+   "bb_k": 2.5,
+   "rsi_max": 10,
+   "max_bars": 16,
+   "stop_atr": 3.0,
+   "trend": 800
+  },
+  "risk_per_trade": 0.01,
+  "max_position_fraction": 0.25,
+  "backtest_days": 178,
+  "markets": [
+   "SOL",
+   "JUP",
+   "BONK",
+   "RAY",
+   "PENGU"
+  ],
+  "costs": {
+   "SOL": 0.0005,
+   "JUP": 0.0006,
+   "BONK": 0.0012,
+   "RAY": 0.0009,
+   "PENGU": 0.0005
+  },
+  "STARTING_CASH": 10000.0
+ }
+}

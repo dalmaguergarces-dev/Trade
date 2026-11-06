@@ -1,46 +1,75 @@
-"""Public candle data from Coinbase Exchange (no API key needed)."""
+"""Solana DEX candles from GeckoTerminal's free public API (no key needed).
+
+Prices are in USD from the token's most liquid Solana pool. The free API
+serves the last 180 days and about 30 requests per minute.
+"""
 
 import json
 import time
+import urllib.error
 import urllib.request
-from datetime import datetime, timezone
 
-BASE = "https://api.exchange.coinbase.com"
-MAX_PER_REQUEST = 300
+BASE = "https://api.geckoterminal.com/api/v2/networks/solana/pools"
+MAX_PER_REQUEST = 1000
+_last_call = [0.0]
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "paper-trading-bot"})
-    for attempt in range(4):
+    req = urllib.request.Request(url, headers={
+        "Accept": "application/json;version=20230203",
+        "User-Agent": "paper-trading-bot",
+    })
+    for attempt in range(6):
+        wait = 2.2 - (time.time() - _last_call[0])  # ~27 requests/minute
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[0] = time.time()
         try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read())
-        except Exception:
-            if attempt == 3:
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or attempt == 5:
                 raise
-            time.sleep(2 ** attempt)
+            time.sleep(10 * (attempt + 1))
+        except Exception:
+            if attempt == 5:
+                raise
+            time.sleep(3 * (attempt + 1))
 
 
-def _iso(ts):
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+def fetch_candles(pool, granularity, start, end):
+    """Closed candles with start <= time < end, oldest first, on a gap-free grid.
 
-
-def fetch_candles(symbol, granularity, start, end):
-    """Closed candles with start <= time < end, oldest first.
-
-    Each candle is a dict: t (open time, unix s), o, h, l, c, v.
+    Each candle is a dict: t (open time, unix s), o, h, l, c, v (USD volume).
+    Intervals with no trades are filled with a flat candle at the last close.
     """
-    out = {}
-    chunk = granularity * MAX_PER_REQUEST
-    cursor = start
-    while cursor < end:
-        stop = min(cursor + chunk, end)
-        url = (f"{BASE}/products/{symbol}/candles?granularity={granularity}"
-               f"&start={_iso(cursor)}&end={_iso(stop)}")
-        for t, low, high, open_, close, vol in _get(url):
-            out[t] = {"t": t, "o": open_, "h": high, "l": low, "c": close, "v": vol}
-        cursor = stop
-        time.sleep(0.15)  # stay well under the public rate limit
+    minutes = granularity // 60
+    raw = {}
+    before = end
+    while before > start:
+        url = (f"{BASE}/{pool}/ohlcv/minute?aggregate={minutes}"
+               f"&limit={MAX_PER_REQUEST}&before_timestamp={before}&currency=usd")
+        rows = _get(url)["data"]["attributes"]["ohlcv_list"]
+        if not rows:
+            break
+        for t, o, h, l, c, v in rows:
+            raw[int(t)] = {"t": int(t), "o": o, "h": h, "l": l, "c": c, "v": v}
+        oldest = min(int(r[0]) for r in rows)
+        if oldest >= before:
+            break
+        before = oldest
+
     now = time.time()
-    return [out[t] for t in sorted(out)
-            if start <= t < end and t + granularity <= now]
+    times = [t for t in sorted(raw) if start <= t < end and t + granularity <= now]
+    if not times:
+        return []
+    out, prev = [], None
+    t = times[0]
+    while t <= times[-1]:
+        c = raw.get(t)
+        if c is None:
+            c = {"t": t, "o": prev["c"], "h": prev["c"], "l": prev["c"], "c": prev["c"], "v": 0.0}
+        out.append(c)
+        prev = c
+        t += granularity
+    return out

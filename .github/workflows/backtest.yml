@@ -3,9 +3,12 @@ name: Backtest
 on:
   workflow_dispatch:
     inputs:
+      account:
+        description: "Account (solana_15m or swing_6h)"
+        default: "solana_15m"
       days:
-        description: "Days of history"
-        default: "1460"
+        description: "Days of history (blank = account default)"
+        default: ""
 
 permissions:
   contents: write
@@ -18,13 +21,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m bot.backtest "${{ inputs.days }}"
+      - run: python -m bot.backtest "${{ inputs.account }}" ${{ inputs.days }}
       - name: Commit backtest results
         run: |
           git config user.name "paper-bot"
           git config user.email "paper-bot@users.noreply.github.com"
-          git add docs/data/backtest.json
+          git add docs/data/*_backtest.json
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Update backtest"
+          git commit -m "Update ${{ inputs.account }} backtest"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push

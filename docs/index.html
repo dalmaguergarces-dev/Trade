@@ -2,101 +2,190 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paper Trading Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Paper Bots">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233b5bdb'/%3E%3Cpath d='M12 44 L26 30 L36 38 L52 20' stroke='white' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Paper Trading Bots</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #646b78;
     --line: #e3e6eb; --up: #0f8a5f; --down: #c93b3b; --accent: #3b5bdb;
-    --warn-bg: #fff6db; --warn-text: #7a5b00;
+    --warn-bg: #fff6db; --warn-text: #7a5b00; --tab: #e8ebf0;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1115; --card: #171a21; --text: #e8eaee; --muted: #9aa1ad;
       --line: #2a2f39; --up: #3ccf91; --down: #ff6b6b; --accent: #7c95ff;
-      --warn-bg: #2e2712; --warn-text: #f0cf6e;
+      --warn-bg: #2e2712; --warn-text: #f0cf6e; --tab: #1f232b;
     }
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
-  h1 { font-size: 24px; margin: 0; }
-  h2 { font-size: 17px; margin: 32px 0 12px; }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-  .pill { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px 16px calc(48px + env(safe-area-inset-bottom)); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: env(safe-area-inset-top); }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 99px; white-space: nowrap;
     background: var(--warn-bg); color: var(--warn-text); }
   .muted { color: var(--muted); font-size: 13px; }
-  .note { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px;
-    padding: 12px 14px; margin-top: 16px; font-size: 14px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-  .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-  .value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+  /* Account switcher: stays visible while scrolling. */
+  .tabs-wrap { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0; margin-top: 6px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--tab); }
+  .tab { border: 0; background: transparent; color: var(--text); border-radius: 9px; padding: 9px 10px;
+    font: inherit; font-weight: 600; cursor: pointer; min-height: 48px; }
+  .tab small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
+  .tab[aria-selected="true"] { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .hero .label { color: var(--muted); font-size: 13px; }
+  .hero .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 2px 0 4px; }
+  .hero .chg { font-size: 16px; font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 10px; margin-top: 14px;
+    padding-top: 14px; border-top: 1px solid var(--line); }
+  .stat .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+  .stat .v { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
   .up { color: var(--up); } .down { color: var(--down); }
-  .chart { height: 280px; }
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
-  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th:first-child, td:first-child { text-align: left; }
-  th { color: var(--muted); font-weight: 500; font-size: 12px; }
-  .empty { color: var(--muted); text-align: center; padding: 18px; }
+  .chart { position: relative; height: 240px; margin-top: 12px; padding: 12px 8px 4px; }
+
+  .list { display: grid; gap: 8px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .item .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .item .sym { font-weight: 700; font-size: 16px; }
+  .item .pnl { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .item .meta { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .empty { color: var(--muted); text-align: center; padding: 18px; background: var(--card);
+    border: 1px dashed var(--line); border-radius: 12px; font-size: 14px; }
+  .more { width: 100%; margin-top: 8px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+
+  .note { background: var(--warn-bg); color: var(--warn-text); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+  details.card { padding: 0; margin-top: 10px; }
+  details > summary { list-style: none; cursor: pointer; padding: 14px 16px; display: flex; justify-content: space-between;
+    align-items: center; gap: 12px; min-height: 48px; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::after { content: "›"; font-size: 22px; color: var(--muted); transform: rotate(90deg); transition: transform .15s; }
+  details[open] > summary::after { transform: rotate(-90deg); }
+  details .body { padding: 0 16px 16px; }
+  details .body .stats { margin-top: 0; }
+  .sumtitle { font-weight: 650; }
+  .costs { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .costs td, .costs th { padding: 8px 4px; border-bottom: 1px solid var(--line); text-align: right; }
+  .costs td:first-child, .costs th:first-child { text-align: left; }
+  .costs th { color: var(--muted); font-weight: 500; font-size: 12px; }
+
+  @media (max-width: 560px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .hero .big { font-size: 30px; }
+    .chart { height: 210px; }
+  }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Paper Trading Bot</h1>
-    <span class="pill">PAPER MONEY ONLY</span>
+    <h1>Paper Trading Bots</h1>
+    <span class="pill">PAPER MONEY</span>
   </header>
+  <div class="tabs-wrap"><div class="tabs" id="tabs" role="tablist"></div></div>
+
+  <section class="card hero">
+    <div class="label" id="hero-label">Paper account</div>
+    <div class="big" id="equity">–</div>
+    <div class="chg" id="change">&nbsp;</div>
+    <div class="stats" id="live-stats"></div>
+  </section>
+  <div class="card chart"><canvas id="live-chart" aria-label="Account value over time"></canvas></div>
   <p class="muted" id="sub">Loading…</p>
 
-  <h2>Live paper account</h2>
-  <div class="grid" id="live-stats"></div>
-  <div class="card chart" style="margin-top:12px"><canvas id="live-chart"></canvas></div>
-
   <h2>Open positions</h2>
-  <div class="card table-wrap"><table id="positions"></table></div>
+  <div class="list" id="positions"></div>
 
-  <h2>Closed trades</h2>
-  <div class="card table-wrap"><table id="trades"></table></div>
+  <h2>Trades</h2>
+  <div class="list" id="trades"></div>
+  <button class="more" id="more" hidden>Show all trades</button>
 
-  <h2>Backtest: the same strategy on past data</h2>
-  <p class="muted" id="bt-sub"></p>
-  <div class="grid" id="bt-stats"></div>
-  <div class="card chart" style="margin-top:12px"><canvas id="bt-chart"></canvas></div>
-  <h2>Effect of trading fees on the backtest</h2>
-  <div class="card table-wrap"><table id="fees"></table></div>
+  <h2>About this bot</h2>
+  <div class="note" id="about"></div>
 
-  <div class="note">
-    The strategy uses 6-hour candles and trades about twice a month across BTC, ETH and SOL.
-    Watching it for a few days will mostly show it waiting in cash, and even a few weeks of
-    results is too small a sample to prove anything. The backtest above covers far more trades.
-    It shows the bot losing less than buy-and-hold in falling markets but making far less in
-    rising ones. Past results don't predict future ones.
-  </div>
+  <details class="card" id="bt">
+    <summary><span><span class="sumtitle">How it did in testing</span><br><span class="muted" id="bt-summary">Loading…</span></span></summary>
+    <div class="body">
+      <p class="muted" id="bt-sub"></p>
+      <div class="stats" id="bt-stats"></div>
+      <div class="chart" style="padding:0"><canvas id="bt-chart" aria-label="Backtest account value"></canvas></div>
+      <h2>Final third on its own</h2>
+      <p class="muted" id="tail-sub"></p>
+      <div class="stats" id="tail-stats"></div>
+      <h2>Effect of trading costs</h2>
+      <table class="costs" id="costs"></table>
+    </div>
+  </details>
 </main>
 <script>
+// Each account is a separate paper bot with its own strategy and data.
+const ACCOUNTS = {
+  solana_15m: {
+    label: "Solana · 15m", short: "SOL JUP BONK RAY PENGU",
+    about: "Buys sharp short-term dips in Solana tokens and sells on the bounce, using DEX prices and real Jupiter swap costs. " +
+      "It trades about once a day. In testing it was roughly breakeven after costs: before costs it earns only about 0.1–0.25% per trade, " +
+      "so a swing of a few percent either way over a few weeks is normal noise.",
+  },
+  swing_6h: {
+    label: "Swing · 6h", short: "BTC ETH SOL",
+    about: "Follows multi-day trends on 6-hour candles and trades about twice a month, so expect long stretches in cash. " +
+      "Over 4 years of testing it made a modest profit with small drawdowns, but far less than simply holding in bull markets.",
+  },
+};
+const LIVE_BASE = "https://raw.githubusercontent.com/dalmaguergarces-dev/Trade/main/docs/";
+const SHOW = 10;
+
 const $ = (id) => document.getElementById(id);
-const usd = (v) => v == null ? "–" : v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: v < 10 ? 4 : 2 });
+const usd = (v) => v == null ? "–" : v.toLocaleString("en-US", { style: "currency", currency: "USD",
+  maximumFractionDigits: Math.abs(v) < 0.01 ? 8 : Math.abs(v) < 10 ? 4 : 2 });
 const pct = (v) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(2) + "%";
 const cls = (v) => v > 0 ? "up" : v < 0 ? "down" : "";
-const date = (t) => new Date(t * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+const when = (t) => new Date(t * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const day = (t) => new Date(t * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const dur = (s) => s < 3600 ? Math.round(s / 60) + "m" : s < 86400 ? (s / 3600).toFixed(1).replace(".0", "") + "h" : (s / 86400).toFixed(1).replace(".0", "") + "d";
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const REASON = { signal: "bounce", stop: "stop-loss", target: "target", time: "time limit" };
 
-function statCards(el, s, extra = []) {
-  const items = [
-    ["Equity", usd(s.equity), ""],
-    ["Return", pct(s.return_pct), cls(s.return_pct)],
-    ["Trades", s.trades, ""],
-    ["Win rate", s.win_rate == null ? "–" : s.win_rate + "%", ""],
-    ["Profit factor", s.profit_factor ?? "–", ""],
-    ["Max drawdown", !s.max_drawdown_pct ? "0%" : "-" + s.max_drawdown_pct + "%", ""],
-    ...extra,
+let current = "solana_15m", showAll = false;
+try { const saved = localStorage.getItem("account"); if (ACCOUNTS[saved]) current = saved; } catch (e) {}
+
+function renderTabs() {
+  $("tabs").innerHTML = Object.entries(ACCOUNTS).map(([k, a]) =>
+    `<button class="tab" role="tab" aria-selected="${k === current}" data-k="${k}">${a.label}<small>${a.short}</small></button>`).join("");
+  $("tabs").querySelectorAll("button").forEach(b => b.onclick = () => {
+    if (b.dataset.k === current) return;
+    current = b.dataset.k; showAll = false;
+    try { localStorage.setItem("account", current); } catch (e) {}
+    renderTabs(); render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  $("about").textContent = ACCOUNTS[current].about;
+}
+
+function stats(el, items) {
+  el.innerHTML = items.map(([k, v, c]) => `<div class="stat"><div class="k">${k}</div><div class="v ${c || ""}">${v}</div></div>`).join("");
+}
+function coreStats(s) {
+  return [
+    ["Trades", s.trades], ["Per day", s.trades_per_day ?? "–"],
+    ["Win rate", s.win_rate == null ? "–" : s.win_rate + "%"],
+    ["Avg trade", s.avg_trade_pct == null ? "–" : pct(s.avg_trade_pct), cls(s.avg_trade_pct)],
+    ["Profit factor", s.profit_factor ?? "–"],
+    ["Max drop", !s.max_drawdown_pct ? "0%" : "-" + s.max_drawdown_pct + "%"],
   ];
-  el.innerHTML = items.map(([l, v, c]) =>
-    `<div class="card"><div class="label">${l}</div><div class="value ${c}">${v}</div></div>`).join("");
 }
 
 const charts = {};
@@ -106,7 +195,7 @@ function equityChart(id, points, start) {
   charts[id] = new Chart($(id), {
     type: "line",
     data: {
-      labels: points.map(p => new Date(p[0] * 1000).toLocaleDateString()),
+      labels: points.map(p => p[0]),
       datasets: [
         { data: points.map(p => p[1]), borderColor: css("--accent"), borderWidth: 2, pointRadius: 0, tension: 0.1 },
         { data: points.map(() => start), borderColor: css("--muted"), borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
@@ -114,25 +203,27 @@ function equityChart(id, points, start) {
     },
     options: {
       maintainAspectRatio: false, animation: false,
-      plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false,
-        callbacks: { label: (c) => c.datasetIndex ? "Start " + usd(c.raw) : "Equity " + usd(c.raw) } } },
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { display: false }, tooltip: { displayColors: false,
+        callbacks: { title: (c) => when(c[0].label), label: (c) => c.datasetIndex ? null : usd(c.raw) } } },
       scales: {
-        x: { ticks: { color: css("--muted"), maxTicksLimit: 6 }, grid: { display: false } },
-        y: { ticks: { color: css("--muted"), callback: (v) => "$" + v.toLocaleString() }, grid: { color: css("--line") } },
+        x: { ticks: { color: css("--muted"), maxTicksLimit: 4, maxRotation: 0, autoSkip: true,
+               callback: function (v) { return new Date(this.getLabelForValue(v) * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }); } },
+             grid: { display: false } },
+        y: { position: "right", ticks: { color: css("--muted"), maxTicksLimit: 5,
+               callback: (v) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : v) },
+             grid: { color: css("--line") } },
       },
     },
   });
 }
 
-function table(el, head, rows, emptyText) {
-  el.innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` +
-    (rows.length ? rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")
-      : `<tr><td class="empty" colspan="${head.length}">${emptyText}</td></tr>`) + "</tbody>";
+function list(el, items, emptyText) {
+  el.innerHTML = items.length ? items.join("") : `<div class="empty">${emptyText}</div>`;
 }
 
 // Read the bot's latest data straight from GitHub so the site stays current
 // without redeploying; fall back to the copy bundled with the deployment.
-const LIVE_BASE = "https://raw.githubusercontent.com/dalmaguergarces-dev/Trade/main/docs/";
 async function load(path) {
   for (const url of [LIVE_BASE + path, path]) {
     try {
@@ -144,42 +235,62 @@ async function load(path) {
 }
 
 async function render() {
+  const acct = current;
   try {
-    const st = await load("data/state.json");
-    const start = st.config.STARTING_CASH;
-    const last = Math.max(...Object.values(st.last_candle));
-    $("sub").textContent = `Started ${date(st.started)} · last candle processed ${date(last)} · ` +
-      `fees ${(st.config.FEE_RATE * 100).toFixed(2)}% + slippage ${(st.config.SLIPPAGE * 100).toFixed(2)}% per side`;
-    statCards($("live-stats"), st.stats, [["Open positions", Object.keys(st.positions).length, ""]]);
+    const st = await load(`data/${acct}.json`);
+    if (acct !== current) return;
+    const s = st.stats, start = st.config.STARTING_CASH, gran = st.config.granularity;
+    const open = Object.keys(st.positions).length;
+    $("hero-label").textContent = `${st.title || ACCOUNTS[acct].label} · since ${day(st.started)}`;
+    $("equity").textContent = usd(s.equity);
+    $("change").innerHTML = `<span class="${cls(s.return_pct)}">${pct(s.return_pct)} (${usd(s.equity - start)})</span>`;
+    stats($("live-stats"), [["Open", open], ...coreStats(s)].slice(0, 8));
     equityChart("live-chart", st.equity, start);
+    const last = Math.max(...Object.values(st.last_candle));
+    $("sub").textContent = `Last update ${when(last + gran)} · checks every ${gran >= 3600 ? gran / 3600 + " hours" : gran / 60 + " min"}`;
 
-    table($("positions"), ["Coin", "Opened", "Qty", "Entry", "Last", "Stop", "Target", "Unrealized"],
-      Object.entries(st.positions).map(([s, p]) => {
-        const lp = st.last_price[s], u = p.qty * (lp - p.entry) - p.entry_fee;
-        return [s, date(p.opened), p.qty.toFixed(5), usd(p.entry), usd(lp), usd(p.stop), usd(p.target),
-          `<span class="${cls(u)}">${usd(u)}</span>`];
-      }), "No open positions. The bot is waiting for a trend signal.");
+    list($("positions"), Object.entries(st.positions).map(([sym, p]) => {
+      const lp = st.last_price[sym], u = p.qty * (lp - p.entry), up = (lp / p.entry - 1) * 100;
+      return `<div class="item"><div class="row"><span class="sym">${sym}</span>
+        <span class="pnl ${cls(u)}">${usd(u)} <small>(${pct(up)})</small></span></div>
+        <div class="meta">Bought ${usd(p.entry)} · now ${usd(lp)} · ${when(p.opened)}</div>
+        <div class="meta">Stop ${usd(p.stop)}${p.target ? " · target " + usd(p.target) : " · exits on bounce"}</div></div>`;
+    }), "No open positions. The bot is waiting for a signal.");
 
-    table($("trades"), ["Coin", "Opened", "Closed", "Entry", "Exit", "Exit reason", "P&L", "P&L %"],
-      st.trades.slice().reverse().map(t => [t.symbol, date(t.opened), date(t.closed), usd(t.entry), usd(t.exit),
-        t.reason, `<span class="${cls(t.pnl)}">${usd(t.pnl)}</span>`, `<span class="${cls(t.pnl)}">${pct(t.pnl_pct)}</span>`]),
-      "No closed trades yet.");
+    const trades = st.trades.slice().reverse();
+    list($("trades"), (showAll ? trades : trades.slice(0, SHOW)).map(t =>
+      `<div class="item"><div class="row"><span class="sym">${t.symbol}</span>
+        <span class="pnl ${cls(t.pnl)}">${usd(t.pnl)} <small>(${pct(t.pnl_pct)})</small></span></div>
+        <div class="meta">${usd(t.entry)} → ${usd(t.exit)} · ${REASON[t.reason] || t.reason} · held ${dur(t.closed - t.opened)}</div>
+        <div class="meta">Closed ${when(t.closed)}</div></div>`), "No closed trades yet.");
+    $("more").hidden = showAll || trades.length <= SHOW;
+    $("more").textContent = `Show all ${trades.length} trades`;
   } catch (e) { $("sub").textContent = "Couldn't load live data: " + e.message; }
 
   try {
-    const bt = await load("data/backtest.json");
-    $("bt-sub").textContent = `${date(bt.start)} → ${date(bt.end)} (${bt.days} days). ` +
-      `Buy-and-hold of the same coins over this period: ${pct(bt.buy_and_hold_return_pct)}.`;
-    statCards($("bt-stats"), bt.stats, [["Buy & hold", pct(bt.buy_and_hold_return_pct), cls(bt.buy_and_hold_return_pct)]]);
-    equityChart("bt-chart", bt.equity, 10000);
-    table($("fees"), ["Fee per side", "Return", "Profit factor", "Max drawdown"],
-      bt.fee_sensitivity.map(f => [f.fee_pct.toFixed(2) + "%", `<span class="${cls(f.return_pct)}">${pct(f.return_pct)}</span>`,
-        f.profit_factor ?? "–", "-" + f.max_drawdown_pct + "%"]), "");
-  } catch (e) { $("bt-sub").textContent = "Couldn't load backtest: " + e.message; }
+    const bt = await load(`data/${acct}_backtest.json`);
+    if (acct !== current) return;
+    const s = bt.stats;
+    $("bt-summary").innerHTML = `<span class="${cls(s.return_pct)}">${pct(s.return_pct)}</span> over ${Math.round(bt.days)} days · ` +
+      `${s.trades_per_day} trades/day · holding: ${pct(bt.buy_and_hold_return_pct)}`;
+    $("bt-sub").textContent = `${day(bt.start)} → ${day(bt.end)}. Started with $10,000. Holding the same tokens instead: ${pct(bt.buy_and_hold_return_pct)}.`;
+    stats($("bt-stats"), [["Return", pct(s.return_pct), cls(s.return_pct)], ["Holding", pct(bt.buy_and_hold_return_pct), cls(bt.buy_and_hold_return_pct)], ...coreStats(s)]);
+    if ($("bt").open) equityChart("bt-chart", bt.equity, 10000);
+    $("bt").ontoggle = () => { if ($("bt").open) equityChart("bt-chart", bt.equity, 10000); };
+    const ft = bt.final_third;
+    $("tail-sub").textContent = `The last ${Math.round(ft.days)} days, started fresh. Holding over the same days: ${pct(ft.buy_and_hold_return_pct)}.`;
+    stats($("tail-stats"), [["Return", pct(ft.stats.return_pct), cls(ft.stats.return_pct)], ...coreStats(ft.stats)]);
+    $("costs").innerHTML = `<thead><tr><th>Costs</th><th>Return</th><th>Avg trade</th><th>Max drop</th></tr></thead><tbody>` +
+      bt.cost_sensitivity.map(f => `<tr><td>${f.cost_scale === 0 ? "None" : f.cost_scale === 1 ? "Realistic" : "Double"}</td>
+        <td class="${cls(f.return_pct)}">${pct(f.return_pct)}</td><td>${pct(f.avg_trade_pct)}</td><td>-${f.max_drawdown_pct}%</td></tr>`).join("") + "</tbody>";
+  } catch (e) { $("bt-summary").textContent = "Couldn't load backtest: " + e.message; }
 }
 
+$("more").onclick = () => { showAll = true; render(); };
+renderTabs();
 render();
 setInterval(render, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
 </script>
 </body>
 </html>
