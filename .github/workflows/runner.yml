@@ -1,0 +1,42 @@
+name: Bot runner
+
+# One long job trades every 15 minutes for ~5.5 hours, then starts the next
+# one, so the bots don't depend on GitHub's unreliable short cron schedules.
+# The hourly schedule only restarts the chain if it ever breaks; while a
+# runner is active, extra starts wait in the queue instead of overlapping.
+# To stop everything: Actions -> Bot runner -> "..." -> Disable workflow.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: bot-runner
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet -r requirements.txt
+      - name: Trade every 15 minutes
+        env:
+          RUN_MINUTES: "330"
+          LIVE_TRADING: ${{ vars.LIVE_TRADING }}
+          SOLANA_BOT_KEY: ${{ secrets.SOLANA_BOT_KEY }}
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+        run: bash scripts/runner.sh
+      - name: Start the next runner
+        if: success() || failure()   # not when you cancel it by hand
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run runner.yml --ref "${GITHUB_REF_NAME}"

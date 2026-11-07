@@ -9,8 +9,13 @@ https://trade-paper-bot.vercel.app
 | `solana_15m` | SOL, JUP, BONK, RAY, PENGU on Solana DEXs | 15 min | Dip-buyer | ~1 / day |
 | `swing_6h` | BTC, ETH, SOL (Coinbase prices) | 6 hours | Trend-follower | ~2 / month |
 
-GitHub Actions runs `python -m bot.run` every 15 minutes. Each account acts only
-when one of its candles has closed, and saves its state to `docs/data/<account>.json`.
+The **Bot runner** workflow (`.github/workflows/runner.yml`) runs the bots every
+15 minutes, just after each candle closes. Each job runs for about 5.5 hours and
+then starts the next one; an hourly schedule restarts the chain if it ever
+breaks. (GitHub's own 15-minute schedules proved unreliable, sometimes skipping
+hours.) Each account saves its state to `docs/data/<account>.json`.
+
+To stop all bots: GitHub → Actions → Bot runner → ⋯ → **Disable workflow**.
 The dashboard reads those files straight from GitHub, so it stays current
 without redeploying. Settings for both accounts live in `bot/config.py`. The
 code uses only the Python standard library.
